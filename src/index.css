@@ -1,0 +1,178 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    @apply border-slate-700/50;
+  }
+  
+  body {
+    @apply bg-sprc-navy text-slate-100 font-body antialiased;
+    background-image: 
+      radial-gradient(ellipse at top, rgba(30, 58, 95, 0.3) 0%, transparent 50%),
+      radial-gradient(ellipse at bottom right, rgba(249, 115, 22, 0.05) 0%, transparent 50%);
+    min-height: 100vh;
+  }
+
+  /* Custom Scrollbar */
+  ::-webkit-scrollbar {
+    @apply w-2 h-2;
+  }
+  
+  ::-webkit-scrollbar-track {
+    @apply bg-sprc-navy;
+  }
+  
+  ::-webkit-scrollbar-thumb {
+    @apply bg-sprc-steel rounded-full;
+  }
+  
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-sprc-slate;
+  }
+}
+
+@layer components {
+  /* Card Styles */
+  .card {
+    @apply bg-gradient-to-br from-sprc-blue/40 to-sprc-navy/80 
+           backdrop-blur-sm rounded-2xl border border-slate-700/30
+           shadow-xl shadow-black/20;
+  }
+  
+  .card-hover {
+    @apply card transition-all duration-300 
+           hover:border-sprc-orange/30 hover:shadow-sprc-orange/5 
+           hover:translate-y-[-2px];
+  }
+
+  /* Badge/Tag Styles */
+  .badge {
+    @apply inline-flex items-center gap-1.5 px-3 py-1 rounded-full 
+           text-xs font-semibold uppercase tracking-wide;
+  }
+  
+  .badge-preventivo {
+    @apply badge bg-blue-500/20 text-blue-300 border border-blue-500/30;
+  }
+  
+  .badge-correctivo {
+    @apply badge bg-orange-500/20 text-orange-300 border border-orange-500/30;
+  }
+  
+  .badge-en-proceso {
+    @apply badge bg-emerald-500/20 text-emerald-300 border border-emerald-500/30;
+  }
+  
+  .badge-esperando {
+    @apply badge bg-amber-500/20 text-amber-300 border border-amber-500/30;
+  }
+  
+  .badge-completado {
+    @apply badge bg-slate-500/20 text-slate-300 border border-slate-500/30;
+  }
+
+  /* Button Styles */
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2.5 
+           rounded-xl font-semibold text-sm transition-all duration-200
+           disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  
+  .btn-primary {
+    @apply btn bg-gradient-to-r from-sprc-orange to-amber-500 
+           text-white shadow-lg shadow-sprc-orange/25
+           hover:shadow-sprc-orange/40 hover:scale-[1.02] 
+           active:scale-[0.98];
+  }
+  
+  .btn-secondary {
+    @apply btn bg-sprc-steel/50 text-slate-200 border border-slate-600/50
+           hover:bg-sprc-steel hover:border-slate-500;
+  }
+  
+  .btn-ghost {
+    @apply btn text-slate-300 hover:bg-slate-700/50 hover:text-white;
+  }
+
+  /* Input Styles */
+  .input {
+    @apply w-full px-4 py-3 bg-sprc-navy/60 border border-slate-700/50 
+           rounded-xl text-slate-100 placeholder:text-slate-500
+           focus:outline-none focus:ring-2 focus:ring-sprc-orange/50 
+           focus:border-sprc-orange/50 transition-all duration-200;
+  }
+  
+  .select {
+    @apply input cursor-pointer appearance-none 
+           bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%2394a3b8%22%20stroke-width%3D%222%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22%2F%3E%3C%2Fsvg%3E')]
+           bg-no-repeat bg-[right_1rem_center] bg-[length:1.25rem];
+  }
+  
+  .textarea {
+    @apply input resize-none min-h-[100px];
+  }
+
+  /* Bay Card Styles */
+  .bay-card {
+    @apply relative overflow-hidden rounded-2xl border transition-all duration-300;
+  }
+  
+  .bay-card-empty {
+    @apply bay-card bg-slate-800/30 border-slate-700/30 border-dashed;
+  }
+  
+  .bay-card-occupied {
+    @apply bay-card bg-gradient-to-br from-sprc-blue/60 to-sprc-steel/40 
+           border-slate-600/50 shadow-lg;
+  }
+
+  /* Progress Bar */
+  .progress-bar {
+    @apply h-2 bg-slate-700/50 rounded-full overflow-hidden;
+  }
+  
+  .progress-bar-fill {
+    @apply h-full rounded-full transition-all duration-500 ease-out;
+  }
+
+  /* Stat Card */
+  .stat-card {
+    @apply card p-5 flex flex-col gap-2;
+  }
+  
+  .stat-value {
+    @apply text-3xl font-display font-bold text-white;
+  }
+  
+  .stat-label {
+    @apply text-sm text-slate-400 font-medium;
+  }
+
+  /* Animations */
+  .animate-in {
+    animation: fadeIn 0.5s ease-out, slideUp 0.5s ease-out;
+  }
+}
+
+/* Loading Spinner */
+.spinner {
+  @apply w-6 h-6 border-2 border-slate-600 border-t-sprc-orange 
+         rounded-full animate-spin;
+}
+
+/* Pulsing Dot for Real-time indicator */
+.pulse-dot {
+  @apply relative;
+}
+
+.pulse-dot::before {
+  content: '';
+  @apply absolute inset-0 rounded-full bg-emerald-500 animate-ping opacity-75;
+}
+
+.pulse-dot::after {
+  content: '';
+  @apply absolute inset-0 rounded-full bg-emerald-500;
+}
