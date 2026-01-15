@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { Header } from '@/components/layout/Header';
 import { StatsCards } from '@/components/dashboard/StatsCards';
 import { BayGrid } from '@/components/hangar/BayGrid';
@@ -19,7 +20,10 @@ import {
   Warehouse,
   Calendar,
   Clock,
-  MessageSquare
+  MessageSquare,
+  Loader2,
+  WifiOff,
+  Wifi
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -37,7 +41,15 @@ function App() {
     vistaActual,
     setVistaActual,
     notas,
+    isLoading,
+    isConnected,
+    error,
+    inicializar,
   } = useHangarStore();
+
+  useEffect(() => {
+    inicializar();
+  }, []);
 
   const notasNoLeidas = notas.filter(n => !n.leida).length;
 
@@ -48,47 +60,80 @@ function App() {
     { id: 'notas' as const, label: 'Notas', icon: MessageSquare, badge: notasNoLeidas },
   ];
 
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-sprc-navy flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="w-12 h-12 text-sprc-orange animate-spin mx-auto mb-4" />
+          <p className="text-white text-lg font-medium">Conectando con la base de datos...</p>
+          <p className="text-slate-400 text-sm mt-2">Hangar SPRC</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isConnected || error) {
+    return (
+      <div className="min-h-screen bg-sprc-navy flex items-center justify-center p-4">
+        <div className="text-center max-w-md">
+          <WifiOff className="w-16 h-16 text-red-400 mx-auto mb-4" />
+          <h1 className="text-white text-xl font-bold mb-2">Error de conexión</h1>
+          <p className="text-slate-400 mb-4">
+            {error || 'No se pudo conectar con la base de datos. Verifica tu conexión a internet y las credenciales de Supabase.'}
+          </p>
+          <Button onClick={() => inicializar()}>
+            <RefreshCw className="w-5 h-5" />
+            Reintentar
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-sprc-navy bg-grid-pattern">
       <Header />
       
       <main className="px-4 lg:px-6 py-6 max-w-[1600px] mx-auto space-y-6">
-        {/* Navegación de vistas */}
-        <nav className="flex items-center gap-2 p-1 bg-slate-800/50 rounded-xl w-fit">
-          {vistas.map((vista) => {
-            const Icon = vista.icon;
-            return (
-              <button
-                key={vista.id}
-                onClick={() => setVistaActual(vista.id)}
-                className={cn(
-                  'flex items-center gap-2 px-4 py-2.5 rounded-lg font-medium transition-all relative',
-                  vistaActual === vista.id
-                    ? 'bg-sprc-orange text-white shadow-lg'
-                    : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
-                )}
-              >
-                <Icon className="w-5 h-5" />
-                <span className="hidden sm:inline">{vista.label}</span>
-                {vista.badge && vista.badge > 0 && (
-                  <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full text-xs flex items-center justify-center text-white font-bold">
-                    {vista.badge}
-                  </span>
-                )}
-              </button>
-            );
-          })}
-        </nav>
+        <div className="flex items-center justify-between">
+          <nav className="flex items-center gap-2 p-1 bg-slate-800/50 rounded-xl w-fit">
+            {vistas.map((vista) => {
+              const Icon = vista.icon;
+              return (
+                <button
+                  key={vista.id}
+                  onClick={() => setVistaActual(vista.id)}
+                  className={cn(
+                    'flex items-center gap-2 px-4 py-2.5 rounded-lg font-medium transition-all relative',
+                    vistaActual === vista.id
+                      ? 'bg-sprc-orange text-white shadow-lg'
+                      : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
+                  )}
+                >
+                  <Icon className="w-5 h-5" />
+                  <span className="hidden sm:inline">{vista.label}</span>
+                  {vista.badge && vista.badge > 0 && (
+                    <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full text-xs flex items-center justify-center text-white font-bold">
+                      {vista.badge}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </nav>
+          
+          <div className="flex items-center gap-2 text-xs text-emerald-400">
+            <Wifi className="w-4 h-4" />
+            <span className="hidden sm:inline">Sincronizado</span>
+          </div>
+        </div>
 
-        {/* Vista: Hangar */}
         {vistaActual === 'hangar' && (
           <>
-            {/* Stats Cards */}
             <section className="animate-fade-in">
               <StatsCards />
             </section>
 
-            {/* Toolbar */}
             <section className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 rounded-2xl bg-sprc-blue/20 border border-slate-700/30">
               <div className="flex flex-wrap items-center gap-3">
                 <div className="flex items-center gap-2 text-slate-400">
@@ -131,7 +176,7 @@ function App() {
                 </div>
 
                 <div className="text-xs text-slate-500 hidden lg:block">
-                  Flota: {camiones.length} camiones (R06-R92, K01-K14)
+                  Flota: {camiones.length} camiones
                 </div>
               </div>
 
@@ -149,7 +194,7 @@ function App() {
                 <button
                   className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-700/50 transition-colors"
                   title="Actualizar"
-                  onClick={() => window.location.reload()}
+                  onClick={() => inicializar()}
                 >
                   <RefreshCw className="w-5 h-5" />
                 </button>
@@ -161,33 +206,28 @@ function App() {
               </div>
             </section>
 
-            {/* Bahías del Hangar */}
             <section className="animate-slide-up" style={{ animationDelay: '0.1s' }}>
               <BayGrid />
             </section>
 
-            {/* Trabajos fuera de bahía */}
             <section className="animate-slide-up" style={{ animationDelay: '0.2s' }}>
               <TrabajosFueraBahia />
             </section>
           </>
         )}
 
-        {/* Vista: Programación */}
         {vistaActual === 'programacion' && (
           <section className="animate-fade-in">
             <ProgramacionDiaria />
           </section>
         )}
 
-        {/* Vista: Timeline */}
         {vistaActual === 'timeline' && (
           <section className="animate-fade-in">
             <TimelineView />
           </section>
         )}
 
-        {/* Vista: Notas */}
         {vistaActual === 'notas' && (
           <section className="animate-fade-in">
             <NotasTurno />
@@ -195,7 +235,6 @@ function App() {
         )}
       </main>
 
-      {/* Modales */}
       <NuevoTrabajoModal />
       <DetalleTrabajoModal />
       <ConfiguracionModal />

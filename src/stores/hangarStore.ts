@@ -1,5 +1,6 @@
 import { create } from 'zustand';
-import { devtools, persist } from 'zustand/middleware';
+import { devtools } from 'zustand/middleware';
+import { supabase } from '@/lib/supabase';
 import type {
   Camion,
   Tecnico,
@@ -15,51 +16,8 @@ import type {
   NuevoTecnicoForm,
   NuevoContratistaForm,
   NuevoTipoTrabajoForm,
-  TipoTrabajo,
-  Turno,
 } from '@/types';
-import { generarCamiones } from '@/types';
 import { getFechaActual, getHoraActual, getFechaManana } from '@/lib/utils';
-
-// ============================================
-// DATOS DE DEMOSTRACIÓN
-// ============================================
-
-const camionesDemo: Camion[] = generarCamiones();
-
-const tecnicosDemo: Tecnico[] = [
-  { id: 'tec-1', nombre: 'Juan Pérez', especialidad: 'mecanico', turno: 'dia', activo: true, created_at: '2024-01-01' },
-  { id: 'tec-2', nombre: 'Carlos Montoya', especialidad: 'mecanico', turno: 'dia', activo: true, created_at: '2024-01-01' },
-  { id: 'tec-3', nombre: 'Miguel Ramírez', especialidad: 'mecanico', turno: 'dia', activo: true, created_at: '2024-01-01' },
-  { id: 'tec-4', nombre: 'Andrés López', especialidad: 'mecanico', turno: 'dia', activo: true, created_at: '2024-01-01' },
-  { id: 'tec-5', nombre: 'Roberto Díaz', especialidad: 'electrico', turno: 'dia', activo: true, created_at: '2024-01-01' },
-  { id: 'tec-6', nombre: 'Fernando Castro', especialidad: 'electrico', turno: 'dia', activo: true, created_at: '2024-01-01' },
-  { id: 'tec-7', nombre: 'Pedro Martínez', especialidad: 'multirol', turno: 'noche', activo: true, created_at: '2024-01-01' },
-];
-
-const contratistasDemo: Contratista[] = [
-  { id: 'cont-1', nombre: 'Pinturas Industriales S.A.', especialidad: 'Pintura y acabados', contacto: '300-555-0101', activo: true, created_at: '2024-01-01' },
-  { id: 'cont-2', nombre: 'Taller Diesel López', especialidad: 'Motor y transmisión', contacto: '300-555-0102', activo: true, created_at: '2024-01-01' },
-  { id: 'cont-3', nombre: 'Hidráulicos del Caribe', especialidad: 'Sistemas hidráulicos', contacto: '300-555-0103', activo: true, created_at: '2024-01-01' },
-  { id: 'cont-4', nombre: 'Servicios Eléctricos JM', especialidad: 'Sistemas eléctricos', contacto: '300-555-0104', activo: true, created_at: '2024-01-01' },
-];
-
-const tiposTrabajoDemo: TipoTrabajoConfig[] = [
-  { id: 'tipo-1', nombre: 'Cambio aceite motor (500h)', categoria: 'preventivo', tiempo_estimado_default: 2, activo: true, created_at: '2024-01-01' },
-  { id: 'tipo-2', nombre: 'Cambio filtros (aceite, aire, comb.)', categoria: 'preventivo', tiempo_estimado_default: 1.5, activo: true, created_at: '2024-01-01' },
-  { id: 'tipo-3', nombre: 'Servicio 6K horas', categoria: 'preventivo', tiempo_estimado_default: 8, activo: true, created_at: '2024-01-01' },
-  { id: 'tipo-4', nombre: 'Servicio 12K horas', categoria: 'preventivo', tiempo_estimado_default: 16, activo: true, created_at: '2024-01-01' },
-  { id: 'tipo-5', nombre: 'Inspección neumáticos', categoria: 'preventivo', tiempo_estimado_default: 1, activo: true, created_at: '2024-01-01' },
-  { id: 'tipo-6', nombre: 'Revisión sistema hidráulico', categoria: 'preventivo', tiempo_estimado_default: 4, activo: true, created_at: '2024-01-01' },
-  { id: 'tipo-7', nombre: 'Revisión sistema de frenos', categoria: 'preventivo', tiempo_estimado_default: 3, activo: true, created_at: '2024-01-01' },
-  { id: 'tipo-8', nombre: 'Revisión sistema eléctrico', categoria: 'preventivo', tiempo_estimado_default: 2, activo: true, created_at: '2024-01-01' },
-];
-
-const trabajosDemo: TrabajoMantenimiento[] = [];
-
-const notasDemo: NotaTurno[] = [];
-
-const programacionDemo: ItemProgramacion[] = [];
 
 // ============================================
 // INTERFACE DEL STORE
@@ -75,9 +33,12 @@ interface HangarState {
   notas: NotaTurno[];
   programacion: ItemProgramacion[];
   
-  // UI State
+  // Estado de conexión
   isLoading: boolean;
+  isConnected: boolean;
   error: string | null;
+  
+  // UI State
   filtroTipo: 'todos' | 'preventivo' | 'correctivo';
   filtroUbicacion: 'todos' | 'bahia' | 'fuera_bahia' | 'otro_departamento';
   busqueda: string;
@@ -85,7 +46,11 @@ interface HangarState {
   modalDetalleTrabajo: string | null;
   modalConfiguracion: boolean;
   vistaActual: 'hangar' | 'programacion' | 'timeline' | 'notas';
-  fechaProgramacion: string; // Fecha seleccionada para ver/editar programación
+  fechaProgramacion: string;
+  
+  // Inicialización
+  inicializar: () => Promise<void>;
+  suscribirseATiempoReal: () => void;
   
   // Computed
   trabajosActivos: () => TrabajoMantenimiento[];
@@ -107,40 +72,36 @@ interface HangarState {
   setFechaProgramacion: (fecha: string) => void;
   
   // CRUD - Trabajos
-  agregarTrabajo: (trabajo: NuevoTrabajoForm) => TrabajoMantenimiento;
-  agregarTrabajoDesdeProgram: (itemId: string, bahia?: number) => TrabajoMantenimiento | null;
-  actualizarEstadoTrabajo: (id: string, estado: EstadoTrabajo, progreso: number, observacion?: string) => void;
-  cerrarTrabajo: (id: string, datos: CierreTrabajoForm) => void;
+  agregarTrabajo: (trabajo: NuevoTrabajoForm) => Promise<TrabajoMantenimiento | null>;
+  agregarTrabajoDesdeProgram: (itemId: string, bahia?: number) => Promise<TrabajoMantenimiento | null>;
+  actualizarEstadoTrabajo: (id: string, estado: EstadoTrabajo, progreso: number, observacion?: string) => Promise<void>;
+  cerrarTrabajo: (id: string, datos: CierreTrabajoForm) => Promise<void>;
   
   // CRUD - Programación
-  agregarItemProgramacion: (item: Omit<ItemProgramacion, 'id' | 'created_at' | 'updated_at' | 'estado_ubicacion'>) => void;
-  actualizarItemProgramacion: (id: string, datos: Partial<ItemProgramacion>) => void;
-  actualizarUbicacionItem: (id: string, ubicacion: EstadoUbicacionProgramacion) => void;
-  eliminarItemProgramacion: (id: string) => void;
-  moverItemASiguienteDia: (id: string) => void;
+  agregarItemProgramacion: (item: Omit<ItemProgramacion, 'id' | 'created_at' | 'updated_at' | 'estado_ubicacion'>) => Promise<void>;
+  actualizarUbicacionItem: (id: string, ubicacion: EstadoUbicacionProgramacion) => Promise<void>;
+  eliminarItemProgramacion: (id: string) => Promise<void>;
+  moverItemASiguienteDia: (id: string) => Promise<void>;
   
   // CRUD - Técnicos
-  agregarTecnico: (tecnico: NuevoTecnicoForm) => void;
-  actualizarTecnico: (id: string, datos: Partial<Tecnico>) => void;
-  toggleTecnicoActivo: (id: string) => void;
-  eliminarTecnico: (id: string) => void;
+  agregarTecnico: (tecnico: NuevoTecnicoForm) => Promise<void>;
+  toggleTecnicoActivo: (id: string) => Promise<void>;
+  eliminarTecnico: (id: string) => Promise<void>;
   
   // CRUD - Contratistas
-  agregarContratista: (contratista: NuevoContratistaForm) => void;
-  actualizarContratista: (id: string, datos: Partial<Contratista>) => void;
-  toggleContratistaActivo: (id: string) => void;
-  eliminarContratista: (id: string) => void;
+  agregarContratista: (contratista: NuevoContratistaForm) => Promise<void>;
+  toggleContratistaActivo: (id: string) => Promise<void>;
+  eliminarContratista: (id: string) => Promise<void>;
   
   // CRUD - Tipos de Trabajo
-  agregarTipoTrabajo: (tipo: NuevoTipoTrabajoForm) => void;
-  actualizarTipoTrabajo: (id: string, datos: Partial<TipoTrabajoConfig>) => void;
-  toggleTipoTrabajoActivo: (id: string) => void;
-  eliminarTipoTrabajo: (id: string) => void;
+  agregarTipoTrabajo: (tipo: NuevoTipoTrabajoForm) => Promise<void>;
+  toggleTipoTrabajoActivo: (id: string) => Promise<void>;
+  eliminarTipoTrabajo: (id: string) => Promise<void>;
   
   // CRUD - Notas de Turno
-  agregarNota: (nota: Omit<NotaTurno, 'id' | 'created_at' | 'leida'>) => void;
-  marcarNotaLeida: (id: string) => void;
-  eliminarNota: (id: string) => void;
+  agregarNota: (nota: Omit<NotaTurno, 'id' | 'created_at' | 'leida'>) => Promise<void>;
+  marcarNotaLeida: (id: string) => Promise<void>;
+  eliminarNota: (id: string) => Promise<void>;
   
   // Helpers
   getCamionById: (id: string) => Camion | undefined;
@@ -157,427 +118,800 @@ interface HangarState {
 
 export const useHangarStore = create<HangarState>()(
   devtools(
-    persist(
-      (set, get) => ({
-        // Initial Data
-        camiones: camionesDemo,
-        tecnicos: tecnicosDemo,
-        contratistas: contratistasDemo,
-        tiposTrabajo: tiposTrabajoDemo,
-        trabajos: trabajosDemo,
-        notas: notasDemo,
-        programacion: programacionDemo,
+    (set, get) => ({
+      // Initial Data
+      camiones: [],
+      tecnicos: [],
+      contratistas: [],
+      tiposTrabajo: [],
+      trabajos: [],
+      notas: [],
+      programacion: [],
+      
+      // Estado
+      isLoading: true,
+      isConnected: false,
+      error: null,
+      
+      // UI State
+      filtroTipo: 'todos',
+      filtroUbicacion: 'todos',
+      busqueda: '',
+      modalNuevoTrabajo: false,
+      modalDetalleTrabajo: null,
+      modalConfiguracion: false,
+      vistaActual: 'hangar',
+      fechaProgramacion: getFechaManana(),
+      
+      // ==========================================
+      // INICIALIZACIÓN Y TIEMPO REAL
+      // ==========================================
+      
+      inicializar: async () => {
+        set({ isLoading: true, error: null });
         
-        // UI State
-        isLoading: false,
-        error: null,
-        filtroTipo: 'todos',
-        filtroUbicacion: 'todos',
-        busqueda: '',
-        modalNuevoTrabajo: false,
-        modalDetalleTrabajo: null,
-        modalConfiguracion: false,
-        vistaActual: 'hangar',
-        fechaProgramacion: getFechaManana(),
-        
-        // Computed
-        trabajosActivos: () => {
-          const { trabajos, filtroTipo, filtroUbicacion, busqueda, camiones } = get();
-          const hoy = getFechaActual();
+        try {
+          const [
+            camionesRes,
+            tecnicosRes,
+            contratistasRes,
+            tiposTrabajoRes,
+            trabajosRes,
+            notasRes,
+            programacionRes,
+          ] = await Promise.all([
+            supabase.from('camiones').select('*').order('numero'),
+            supabase.from('tecnicos').select('*').order('nombre'),
+            supabase.from('contratistas').select('*').order('nombre'),
+            supabase.from('tipos_trabajo').select('*').order('nombre'),
+            supabase.from('trabajos').select('*').order('created_at', { ascending: false }),
+            supabase.from('notas_turno').select('*').order('created_at', { ascending: false }),
+            supabase.from('programacion').select('*').order('created_at', { ascending: false }),
+          ]);
           
-          return trabajos
-            .filter(t => t.estado !== 'completado' && t.fecha_entrada === hoy)
-            .filter(t => filtroTipo === 'todos' || t.tipo === filtroTipo)
-            .filter(t => filtroUbicacion === 'todos' || t.ubicacion_tipo === filtroUbicacion)
-            .filter(t => {
-              if (!busqueda) return true;
-              const camion = camiones.find(c => c.id === t.camion_id);
-              return camion?.numero.toLowerCase().includes(busqueda.toLowerCase());
-            });
-        },
-        
-        bahiasOcupadas: () => {
-          const { trabajos } = get();
-          const hoy = getFechaActual();
-          return trabajos
-            .filter(t => t.estado !== 'completado' && t.fecha_entrada === hoy && t.ubicacion_tipo === 'bahia')
-            .map(t => t.bahia_numero!)
-            .filter(Boolean);
-        },
-        
-        disponibilidad: () => {
-          const { trabajos, camiones } = get();
-          const hoy = getFechaActual();
-          const enMantenimiento = new Set(
-            trabajos
-              .filter(t => t.estado !== 'completado' && t.fecha_entrada === hoy)
-              .map(t => t.camion_id)
-          ).size;
+          if (camionesRes.error) throw camionesRes.error;
+          if (tecnicosRes.error) throw tecnicosRes.error;
+          if (contratistasRes.error) throw contratistasRes.error;
+          if (tiposTrabajoRes.error) throw tiposTrabajoRes.error;
+          if (trabajosRes.error) throw trabajosRes.error;
+          if (notasRes.error) throw notasRes.error;
+          if (programacionRes.error) throw programacionRes.error;
           
-          const total = camiones.length;
-          const operativos = total - enMantenimiento;
-          const porcentaje = Math.round((operativos / total) * 1000) / 10;
-          
-          return { operativos, enMantenimiento, porcentaje };
-        },
-        
-        camionesDisponibles: () => {
-          const { camiones, trabajos } = get();
-          const hoy = getFechaActual();
-          const enMantenimientoIds = new Set(
-            trabajos
-              .filter(t => t.estado !== 'completado' && t.fecha_entrada === hoy)
-              .map(t => t.camion_id)
+          // Cargar técnicos asignados a trabajos
+          const trabajosConTecnicos = await Promise.all(
+            (trabajosRes.data || []).map(async (trabajo) => {
+              const { data: tecnicosData } = await supabase
+                .from('trabajo_tecnicos')
+                .select('tecnico_id')
+                .eq('trabajo_id', trabajo.id);
+              return {
+                ...trabajo,
+                tecnicos: tecnicosData?.map(t => t.tecnico_id) || [],
+              };
+            })
           );
-          return camiones.filter(c => c.estado === 'operativo' && !enMantenimientoIds.has(c.id));
-        },
-        
-        getProgramacionPorFecha: (fecha: string) => {
-          return get().programacion.filter(p => p.fecha_programada === fecha);
-        },
-        
-        getNotasPorFecha: (fecha: string) => {
-          return get().notas.filter(n => n.fecha === fecha).sort((a, b) => {
-            const prioridadOrden = { urgente: 0, alta: 1, normal: 2 };
-            return prioridadOrden[a.prioridad] - prioridadOrden[b.prioridad];
+          
+          // Cargar técnicos asignados a programación
+          const programacionConTecnicos = await Promise.all(
+            (programacionRes.data || []).map(async (item) => {
+              const { data: tecnicosData } = await supabase
+                .from('programacion_tecnicos')
+                .select('tecnico_id')
+                .eq('programacion_id', item.id);
+              return {
+                ...item,
+                tecnicos_asignados: tecnicosData?.map(t => t.tecnico_id) || [],
+              };
+            })
+          );
+          
+          set({
+            camiones: camionesRes.data || [],
+            tecnicos: tecnicosRes.data || [],
+            contratistas: contratistasRes.data || [],
+            tiposTrabajo: tiposTrabajoRes.data || [],
+            trabajos: trabajosConTecnicos,
+            notas: notasRes.data || [],
+            programacion: programacionConTecnicos,
+            isLoading: false,
+            isConnected: true,
           });
-        },
-        
-        getEstadisticasProgramacion: (fecha: string) => {
-          const items = get().programacion.filter(p => p.fecha_programada === fecha);
-          return {
-            total: items.length,
-            completados: items.filter(i => i.estado_ubicacion === 'completado').length,
-            pendientes: items.filter(i => i.estado_ubicacion === 'pendiente').length,
-            enProceso: items.filter(i => !['pendiente', 'completado', 'cancelado'].includes(i.estado_ubicacion)).length,
-          };
-        },
-        
-        // Setters UI
-        setFiltroTipo: (filtro) => set({ filtroTipo: filtro }),
-        setFiltroUbicacion: (filtro) => set({ filtroUbicacion: filtro }),
-        setBusqueda: (busqueda) => set({ busqueda }),
-        setModalNuevoTrabajo: (open) => set({ modalNuevoTrabajo: open }),
-        setModalDetalleTrabajo: (id) => set({ modalDetalleTrabajo: id }),
-        setModalConfiguracion: (open) => set({ modalConfiguracion: open }),
-        setVistaActual: (vista) => set({ vistaActual: vista }),
-        setFechaProgramacion: (fecha) => set({ fechaProgramacion: fecha }),
-        
-        // CRUD - Trabajos
-        agregarTrabajo: (form) => {
-          const nuevoTrabajo: TrabajoMantenimiento = {
-            ...form,
-            id: `trab-${Date.now()}`,
-            fecha_entrada: getFechaActual(),
-            hora_entrada: getHoraActual(),
-            estado: 'en_proceso',
-            progreso_estimado: 0,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          };
           
-          set(state => ({
-            trabajos: [...state.trabajos, nuevoTrabajo],
-            camiones: state.camiones.map(c =>
-              c.id === form.camion_id ? { ...c, estado: 'en_mantenimiento' as const } : c
-            ),
-            modalNuevoTrabajo: false,
-          }));
+          get().suscribirseATiempoReal();
           
-          return nuevoTrabajo;
-        },
+        } catch (error: any) {
+          console.error('Error inicializando:', error);
+          set({ 
+            isLoading: false, 
+            isConnected: false,
+            error: error.message || 'Error conectando con la base de datos'
+          });
+        }
+      },
+      
+      suscribirseATiempoReal: () => {
+        // Trabajos
+        supabase
+          .channel('trabajos-changes')
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'trabajos' }, async () => {
+            const { data } = await supabase.from('trabajos').select('*').order('created_at', { ascending: false });
+            if (data) {
+              const trabajosConTecnicos = await Promise.all(
+                data.map(async (trabajo) => {
+                  const { data: tecnicosData } = await supabase
+                    .from('trabajo_tecnicos')
+                    .select('tecnico_id')
+                    .eq('trabajo_id', trabajo.id);
+                  return { ...trabajo, tecnicos: tecnicosData?.map(t => t.tecnico_id) || [] };
+                })
+              );
+              set({ trabajos: trabajosConTecnicos });
+            }
+          })
+          .subscribe();
         
-        agregarTrabajoDesdeProgram: (itemId: string, bahia?: number) => {
-          const item = get().programacion.find(p => p.id === itemId);
-          if (!item) return null;
-          
-          const camion = get().camiones.find(c => c.id === item.camion_id);
-          if (!camion) return null;
-          
-          const nuevoTrabajo: TrabajoMantenimiento = {
-            id: `trab-${Date.now()}`,
-            camion_id: item.camion_id,
-            ubicacion_tipo: bahia ? 'bahia' : 'fuera_bahia',
-            bahia_numero: bahia,
-            tipo: item.tipo,
-            descripcion_falla: item.tipo === 'correctivo' ? item.descripcion_trabajo : undefined,
-            paquete_trabajo: item.tipo === 'preventivo' ? [item.descripcion_trabajo] : undefined,
-            ejecutado_por: item.tecnicos_asignados.length > 0 ? 'tecnico_interno' : (item.contratista_id ? 'contratista' : 'tecnico_interno'),
-            tecnicos: item.tecnicos_asignados,
-            contratista_id: item.contratista_id,
-            fecha_entrada: getFechaActual(),
-            hora_entrada: getHoraActual(),
-            tiempo_estimado_horas: 4,
-            estado: 'en_proceso',
-            progreso_estimado: 0,
-            horometro_entrada: camion.horometro_actual,
-            observaciones_iniciales: item.observaciones,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          };
-          
-          set(state => ({
-            trabajos: [...state.trabajos, nuevoTrabajo],
-            camiones: state.camiones.map(c =>
-              c.id === item.camion_id ? { ...c, estado: 'en_mantenimiento' as const } : c
-            ),
-            programacion: state.programacion.map(p =>
-              p.id === itemId ? { ...p, trabajo_id: nuevoTrabajo.id, estado_ubicacion: 'en_hangar' as const } : p
-            ),
-          }));
-          
-          return nuevoTrabajo;
-        },
+        // Programación
+        supabase
+          .channel('programacion-changes')
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'programacion' }, async () => {
+            const { data } = await supabase.from('programacion').select('*').order('created_at', { ascending: false });
+            if (data) {
+              const programacionConTecnicos = await Promise.all(
+                data.map(async (item) => {
+                  const { data: tecnicosData } = await supabase
+                    .from('programacion_tecnicos')
+                    .select('tecnico_id')
+                    .eq('programacion_id', item.id);
+                  return { ...item, tecnicos_asignados: tecnicosData?.map(t => t.tecnico_id) || [] };
+                })
+              );
+              set({ programacion: programacionConTecnicos });
+            }
+          })
+          .subscribe();
         
-        actualizarEstadoTrabajo: (id, estado, progreso, observacion) => {
-          set(state => ({
-            trabajos: state.trabajos.map(t =>
-              t.id === id
-                ? {
-                    ...t,
-                    estado,
-                    progreso_estimado: progreso,
-                    observaciones_finales: observacion
-                      ? `${t.observaciones_finales || ''}\n[${getHoraActual()}] ${observacion}`.trim()
-                      : t.observaciones_finales,
-                    updated_at: new Date().toISOString(),
-                  }
-                : t
-            ),
-          }));
-        },
+        // Notas
+        supabase
+          .channel('notas-changes')
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'notas_turno' }, async () => {
+            const { data } = await supabase.from('notas_turno').select('*').order('created_at', { ascending: false });
+            if (data) set({ notas: data });
+          })
+          .subscribe();
         
-        cerrarTrabajo: (id, datos) => {
+        // Camiones
+        supabase
+          .channel('camiones-changes')
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'camiones' }, async () => {
+            const { data } = await supabase.from('camiones').select('*').order('numero');
+            if (data) set({ camiones: data });
+          })
+          .subscribe();
+        
+        // Técnicos
+        supabase
+          .channel('tecnicos-changes')
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'tecnicos' }, async () => {
+            const { data } = await supabase.from('tecnicos').select('*').order('nombre');
+            if (data) set({ tecnicos: data });
+          })
+          .subscribe();
+        
+        // Contratistas
+        supabase
+          .channel('contratistas-changes')
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'contratistas' }, async () => {
+            const { data } = await supabase.from('contratistas').select('*').order('nombre');
+            if (data) set({ contratistas: data });
+          })
+          .subscribe();
+      },
+      
+      // ==========================================
+      // COMPUTED
+      // ==========================================
+      
+      trabajosActivos: () => {
+        const { trabajos, filtroTipo, filtroUbicacion, busqueda, camiones } = get();
+        const hoy = getFechaActual();
+        
+        return trabajos
+          .filter(t => t.estado !== 'completado' && t.fecha_entrada === hoy)
+          .filter(t => filtroTipo === 'todos' || t.tipo === filtroTipo)
+          .filter(t => filtroUbicacion === 'todos' || t.ubicacion_tipo === filtroUbicacion)
+          .filter(t => {
+            if (!busqueda) return true;
+            const camion = camiones.find(c => c.id === t.camion_id);
+            return camion?.numero.toLowerCase().includes(busqueda.toLowerCase());
+          });
+      },
+      
+      bahiasOcupadas: () => {
+        const { trabajos } = get();
+        const hoy = getFechaActual();
+        return trabajos
+          .filter(t => t.estado !== 'completado' && t.fecha_entrada === hoy && t.ubicacion_tipo === 'bahia')
+          .map(t => t.bahia_numero!)
+          .filter(Boolean);
+      },
+      
+      disponibilidad: () => {
+        const { trabajos, camiones } = get();
+        const hoy = getFechaActual();
+        const enMantenimiento = new Set(
+          trabajos
+            .filter(t => t.estado !== 'completado' && t.fecha_entrada === hoy)
+            .map(t => t.camion_id)
+        ).size;
+        
+        const total = camiones.length;
+        const operativos = total - enMantenimiento;
+        const porcentaje = total > 0 ? Math.round((operativos / total) * 1000) / 10 : 100;
+        
+        return { operativos, enMantenimiento, porcentaje };
+      },
+      
+      camionesDisponibles: () => {
+        const { camiones, trabajos } = get();
+        const hoy = getFechaActual();
+        const enMantenimientoIds = new Set(
+          trabajos
+            .filter(t => t.estado !== 'completado' && t.fecha_entrada === hoy)
+            .map(t => t.camion_id)
+        );
+        return camiones.filter(c => c.estado === 'operativo' && !enMantenimientoIds.has(c.id));
+      },
+      
+      getProgramacionPorFecha: (fecha: string) => {
+        return get().programacion.filter(p => p.fecha_programada === fecha);
+      },
+      
+      getNotasPorFecha: (fecha: string) => {
+        return get().notas.filter(n => n.fecha === fecha).sort((a, b) => {
+          const prioridadOrden: Record<string, number> = { urgente: 0, alta: 1, normal: 2 };
+          return (prioridadOrden[a.prioridad] || 2) - (prioridadOrden[b.prioridad] || 2);
+        });
+      },
+      
+      getEstadisticasProgramacion: (fecha: string) => {
+        const items = get().programacion.filter(p => p.fecha_programada === fecha);
+        return {
+          total: items.length,
+          completados: items.filter(i => i.estado_ubicacion === 'completado').length,
+          pendientes: items.filter(i => i.estado_ubicacion === 'pendiente').length,
+          enProceso: items.filter(i => !['pendiente', 'completado', 'cancelado'].includes(i.estado_ubicacion)).length,
+        };
+      },
+      
+      // ==========================================
+      // SETTERS UI
+      // ==========================================
+      
+      setFiltroTipo: (filtro) => set({ filtroTipo: filtro }),
+      setFiltroUbicacion: (filtro) => set({ filtroUbicacion: filtro }),
+      setBusqueda: (busqueda) => set({ busqueda }),
+      setModalNuevoTrabajo: (open) => set({ modalNuevoTrabajo: open }),
+      setModalDetalleTrabajo: (id) => set({ modalDetalleTrabajo: id }),
+      setModalConfiguracion: (open) => set({ modalConfiguracion: open }),
+      setVistaActual: (vista) => set({ vistaActual: vista }),
+      setFechaProgramacion: (fecha) => set({ fechaProgramacion: fecha }),
+      
+      // ==========================================
+      // CRUD - TRABAJOS
+      // ==========================================
+      
+      agregarTrabajo: async (form) => {
+        try {
+          const { data, error } = await supabase
+            .from('trabajos')
+            .insert({
+              camion_id: form.camion_id,
+              ubicacion_tipo: form.ubicacion_tipo,
+              bahia_numero: form.bahia_numero,
+              ubicacion_especifica: form.ubicacion_especifica,
+              tipo: form.tipo,
+              descripcion_falla: form.descripcion_falla,
+              sistema_afectado: form.sistema_afectado,
+              ejecutado_por: form.ejecutado_por,
+              contratista_id: form.contratista_id,
+              fecha_entrada: getFechaActual(),
+              hora_entrada: getHoraActual(),
+              tiempo_estimado_horas: form.tiempo_estimado_horas,
+              estado: 'en_proceso',
+              progreso_estimado: 0,
+              horometro_entrada: form.horometro_entrada,
+              observaciones_iniciales: form.observaciones_iniciales,
+            })
+            .select()
+            .single();
+          
+          if (error) throw error;
+          
+          if (form.tecnicos && form.tecnicos.length > 0) {
+            await supabase.from('trabajo_tecnicos').insert(
+              form.tecnicos.map(tecnicoId => ({
+                trabajo_id: data.id,
+                tecnico_id: tecnicoId,
+              }))
+            );
+          }
+          
+          await supabase
+            .from('camiones')
+            .update({ estado: 'en_mantenimiento' })
+            .eq('id', form.camion_id);
+          
+          set({ modalNuevoTrabajo: false });
+          return data;
+          
+        } catch (error: any) {
+          console.error('Error agregando trabajo:', error);
+          set({ error: error.message });
+          return null;
+        }
+      },
+      
+      agregarTrabajoDesdeProgram: async (itemId: string, bahia?: number) => {
+        const item = get().programacion.find(p => p.id === itemId);
+        if (!item) return null;
+        
+        const camion = get().camiones.find(c => c.id === item.camion_id);
+        if (!camion) return null;
+        
+        try {
+          const { data, error } = await supabase
+            .from('trabajos')
+            .insert({
+              camion_id: item.camion_id,
+              ubicacion_tipo: bahia ? 'bahia' : 'fuera_bahia',
+              bahia_numero: bahia,
+              tipo: item.tipo,
+              descripcion_falla: item.tipo === 'correctivo' ? item.descripcion_trabajo : null,
+              ejecutado_por: item.tecnicos_asignados?.length > 0 ? 'tecnico_interno' : (item.contratista_id ? 'contratista' : 'tecnico_interno'),
+              contratista_id: item.contratista_id,
+              fecha_entrada: getFechaActual(),
+              hora_entrada: getHoraActual(),
+              tiempo_estimado_horas: 4,
+              estado: 'en_proceso',
+              progreso_estimado: 0,
+              horometro_entrada: camion.horometro_actual,
+              observaciones_iniciales: item.observaciones,
+            })
+            .select()
+            .single();
+          
+          if (error) throw error;
+          
+          if (item.tecnicos_asignados && item.tecnicos_asignados.length > 0) {
+            await supabase.from('trabajo_tecnicos').insert(
+              item.tecnicos_asignados.map(tecnicoId => ({
+                trabajo_id: data.id,
+                tecnico_id: tecnicoId,
+              }))
+            );
+          }
+          
+          await supabase
+            .from('camiones')
+            .update({ estado: 'en_mantenimiento' })
+            .eq('id', item.camion_id);
+          
+          await supabase
+            .from('programacion')
+            .update({ trabajo_id: data.id, estado_ubicacion: 'en_hangar' })
+            .eq('id', itemId);
+          
+          return data;
+          
+        } catch (error: any) {
+          console.error('Error creando trabajo desde programación:', error);
+          set({ error: error.message });
+          return null;
+        }
+      },
+      
+      actualizarEstadoTrabajo: async (id, estado, progreso, observacion) => {
+        try {
           const trabajo = get().trabajos.find(t => t.id === id);
-          if (!trabajo) return;
+          const nuevaObservacion = observacion
+            ? `${trabajo?.observaciones_finales || ''}\n[${getHoraActual()}] ${observacion}`.trim()
+            : trabajo?.observaciones_finales;
           
-          set(state => ({
-            trabajos: state.trabajos.map(t =>
-              t.id === id
-                ? {
-                    ...t,
-                    estado: 'completado' as const,
-                    progreso_estimado: 100,
-                    fecha_salida: getFechaActual(),
-                    hora_salida: datos.hora_salida,
-                    horometro_salida: datos.horometro_salida,
-                    repuestos_utilizados: datos.repuestos_utilizados,
-                    observaciones_finales: datos.observaciones_finales,
-                    estado_final_camion: datos.estado_final_camion,
-                    updated_at: new Date().toISOString(),
-                  }
-                : t
-            ),
-            camiones: state.camiones.map(c =>
-              c.id === trabajo.camion_id
-                ? {
-                    ...c,
-                    estado: datos.estado_final_camion === 'no_operativo' ? 'fuera_servicio' as const : 'operativo' as const,
-                    horometro_actual: datos.horometro_salida,
-                  }
-                : c
-            ),
-            programacion: state.programacion.map(p =>
-              p.trabajo_id === id ? { ...p, estado_ubicacion: 'completado' as const } : p
-            ),
-          }));
-        },
-        
-        // CRUD - Programación
-        agregarItemProgramacion: (item) => {
-          const nuevo: ItemProgramacion = {
-            ...item,
-            id: `prog-${Date.now()}`,
-            estado_ubicacion: 'pendiente',
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          };
-          set(state => ({ programacion: [...state.programacion, nuevo] }));
-        },
-        
-        actualizarItemProgramacion: (id, datos) => {
-          set(state => ({
-            programacion: state.programacion.map(p =>
-              p.id === id ? { ...p, ...datos, updated_at: new Date().toISOString() } : p
-            ),
-          }));
-        },
-        
-        actualizarUbicacionItem: (id, ubicacion) => {
-          set(state => ({
-            programacion: state.programacion.map(p =>
-              p.id === id ? { ...p, estado_ubicacion: ubicacion, updated_at: new Date().toISOString() } : p
-            ),
-          }));
-        },
-        
-        eliminarItemProgramacion: (id) => {
-          set(state => ({
-            programacion: state.programacion.filter(p => p.id !== id),
-          }));
-        },
-        
-        moverItemASiguienteDia: (id) => {
-          const item = get().programacion.find(p => p.id === id);
-          if (!item) return;
+          const { error } = await supabase
+            .from('trabajos')
+            .update({
+              estado,
+              progreso_estimado: progreso,
+              observaciones_finales: nuevaObservacion,
+            })
+            .eq('id', id);
           
-          const fechaActual = new Date(item.fecha_programada);
-          fechaActual.setDate(fechaActual.getDate() + 1);
-          const nuevaFecha = fechaActual.toISOString().split('T')[0];
+          if (error) throw error;
           
-          set(state => ({
-            programacion: state.programacion.map(p =>
-              p.id === id 
-                ? { ...p, fecha_programada: nuevaFecha, estado_ubicacion: 'pendiente' as const, updated_at: new Date().toISOString() } 
-                : p
-            ),
-          }));
-        },
+        } catch (error: any) {
+          console.error('Error actualizando trabajo:', error);
+          set({ error: error.message });
+        }
+      },
+      
+      cerrarTrabajo: async (id, datos) => {
+        const trabajo = get().trabajos.find(t => t.id === id);
+        if (!trabajo) return;
         
-        // CRUD - Técnicos
-        agregarTecnico: (tecnico) => {
-          const nuevo: Tecnico = {
-            ...tecnico,
-            id: `tec-${Date.now()}`,
-            activo: true,
-            created_at: new Date().toISOString(),
-          };
-          set(state => ({ tecnicos: [...state.tecnicos, nuevo] }));
-        },
+        try {
+          const { error } = await supabase
+            .from('trabajos')
+            .update({
+              estado: 'completado',
+              progreso_estimado: 100,
+              fecha_salida: getFechaActual(),
+              hora_salida: datos.hora_salida,
+              horometro_salida: datos.horometro_salida,
+              observaciones_finales: datos.observaciones_finales,
+              estado_final_camion: datos.estado_final_camion,
+            })
+            .eq('id', id);
+          
+          if (error) throw error;
+          
+          await supabase
+            .from('camiones')
+            .update({
+              estado: datos.estado_final_camion === 'no_operativo' ? 'fuera_servicio' : 'operativo',
+              horometro_actual: datos.horometro_salida,
+            })
+            .eq('id', trabajo.camion_id);
+          
+          await supabase
+            .from('programacion')
+            .update({ estado_ubicacion: 'completado' })
+            .eq('trabajo_id', id);
+          
+          if (datos.repuestos_utilizados && datos.repuestos_utilizados.length > 0) {
+            await supabase.from('trabajo_repuestos').insert(
+              datos.repuestos_utilizados.map(r => ({
+                trabajo_id: id,
+                nombre: r.nombre,
+                cantidad: r.cantidad,
+                unidad: r.unidad,
+              }))
+            );
+          }
+          
+          set({ modalDetalleTrabajo: null });
+          
+        } catch (error: any) {
+          console.error('Error cerrando trabajo:', error);
+          set({ error: error.message });
+        }
+      },
+      
+      // ==========================================
+      // CRUD - PROGRAMACIÓN
+      // ==========================================
+      
+      agregarItemProgramacion: async (item) => {
+        try {
+          const { data, error } = await supabase
+            .from('programacion')
+            .insert({
+              camion_id: item.camion_id,
+              fecha_programada: item.fecha_programada,
+              tipo: item.tipo,
+              descripcion_trabajo: item.descripcion_trabajo,
+              contratista_id: item.contratista_id,
+              observaciones: item.observaciones,
+              estado_ubicacion: 'pendiente',
+            })
+            .select()
+            .single();
+          
+          if (error) throw error;
+          
+          if (item.tecnicos_asignados && item.tecnicos_asignados.length > 0) {
+            await supabase.from('programacion_tecnicos').insert(
+              item.tecnicos_asignados.map(tecnicoId => ({
+                programacion_id: data.id,
+                tecnico_id: tecnicoId,
+              }))
+            );
+          }
+          
+        } catch (error: any) {
+          console.error('Error agregando programación:', error);
+          set({ error: error.message });
+        }
+      },
+      
+      actualizarUbicacionItem: async (id, ubicacion) => {
+        try {
+          const { error } = await supabase
+            .from('programacion')
+            .update({ estado_ubicacion: ubicacion })
+            .eq('id', id);
+          
+          if (error) throw error;
+          
+        } catch (error: any) {
+          console.error('Error actualizando ubicación:', error);
+          set({ error: error.message });
+        }
+      },
+      
+      eliminarItemProgramacion: async (id) => {
+        try {
+          await supabase.from('programacion_tecnicos').delete().eq('programacion_id', id);
+          
+          const { error } = await supabase
+            .from('programacion')
+            .delete()
+            .eq('id', id);
+          
+          if (error) throw error;
+          
+        } catch (error: any) {
+          console.error('Error eliminando programación:', error);
+          set({ error: error.message });
+        }
+      },
+      
+      moverItemASiguienteDia: async (id) => {
+        const item = get().programacion.find(p => p.id === id);
+        if (!item) return;
         
-        actualizarTecnico: (id, datos) => {
-          set(state => ({
-            tecnicos: state.tecnicos.map(t =>
-              t.id === id ? { ...t, ...datos } : t
-            ),
-          }));
-        },
+        const fechaActual = new Date(item.fecha_programada);
+        fechaActual.setDate(fechaActual.getDate() + 1);
+        const nuevaFecha = fechaActual.toISOString().split('T')[0];
         
-        toggleTecnicoActivo: (id) => {
-          set(state => ({
-            tecnicos: state.tecnicos.map(t =>
-              t.id === id ? { ...t, activo: !t.activo } : t
-            ),
-          }));
-        },
+        try {
+          const { error } = await supabase
+            .from('programacion')
+            .update({ fecha_programada: nuevaFecha, estado_ubicacion: 'pendiente' })
+            .eq('id', id);
+          
+          if (error) throw error;
+          
+        } catch (error: any) {
+          console.error('Error moviendo programación:', error);
+          set({ error: error.message });
+        }
+      },
+      
+      // ==========================================
+      // CRUD - TÉCNICOS
+      // ==========================================
+      
+      agregarTecnico: async (tecnico) => {
+        try {
+          const { error } = await supabase
+            .from('tecnicos')
+            .insert({
+              nombre: tecnico.nombre,
+              especialidad: tecnico.especialidad,
+              turno: tecnico.turno,
+              activo: true,
+            });
+          
+          if (error) throw error;
+          
+        } catch (error: any) {
+          console.error('Error agregando técnico:', error);
+          set({ error: error.message });
+        }
+      },
+      
+      toggleTecnicoActivo: async (id) => {
+        const tecnico = get().tecnicos.find(t => t.id === id);
+        if (!tecnico) return;
         
-        eliminarTecnico: (id) => {
-          set(state => ({
-            tecnicos: state.tecnicos.filter(t => t.id !== id),
-          }));
-        },
+        try {
+          const { error } = await supabase
+            .from('tecnicos')
+            .update({ activo: !tecnico.activo })
+            .eq('id', id);
+          
+          if (error) throw error;
+          
+        } catch (error: any) {
+          console.error('Error toggling técnico:', error);
+          set({ error: error.message });
+        }
+      },
+      
+      eliminarTecnico: async (id) => {
+        try {
+          const { error } = await supabase
+            .from('tecnicos')
+            .delete()
+            .eq('id', id);
+          
+          if (error) throw error;
+          
+        } catch (error: any) {
+          console.error('Error eliminando técnico:', error);
+          set({ error: error.message });
+        }
+      },
+      
+      // ==========================================
+      // CRUD - CONTRATISTAS
+      // ==========================================
+      
+      agregarContratista: async (contratista) => {
+        try {
+          const { error } = await supabase
+            .from('contratistas')
+            .insert({
+              nombre: contratista.nombre,
+              especialidad: contratista.especialidad,
+              contacto: contratista.contacto,
+              activo: true,
+            });
+          
+          if (error) throw error;
+          
+        } catch (error: any) {
+          console.error('Error agregando contratista:', error);
+          set({ error: error.message });
+        }
+      },
+      
+      toggleContratistaActivo: async (id) => {
+        const contratista = get().contratistas.find(c => c.id === id);
+        if (!contratista) return;
         
-        // CRUD - Contratistas
-        agregarContratista: (contratista) => {
-          const nuevo: Contratista = {
-            ...contratista,
-            id: `cont-${Date.now()}`,
-            activo: true,
-            created_at: new Date().toISOString(),
-          };
-          set(state => ({ contratistas: [...state.contratistas, nuevo] }));
-        },
+        try {
+          const { error } = await supabase
+            .from('contratistas')
+            .update({ activo: !contratista.activo })
+            .eq('id', id);
+          
+          if (error) throw error;
+          
+        } catch (error: any) {
+          console.error('Error toggling contratista:', error);
+          set({ error: error.message });
+        }
+      },
+      
+      eliminarContratista: async (id) => {
+        try {
+          const { error } = await supabase
+            .from('contratistas')
+            .delete()
+            .eq('id', id);
+          
+          if (error) throw error;
+          
+        } catch (error: any) {
+          console.error('Error eliminando contratista:', error);
+          set({ error: error.message });
+        }
+      },
+      
+      // ==========================================
+      // CRUD - TIPOS DE TRABAJO
+      // ==========================================
+      
+      agregarTipoTrabajo: async (tipo) => {
+        try {
+          const { error } = await supabase
+            .from('tipos_trabajo')
+            .insert({
+              nombre: tipo.nombre,
+              categoria: tipo.categoria,
+              descripcion: tipo.descripcion,
+              tiempo_estimado_default: tipo.tiempo_estimado_default,
+              activo: true,
+            });
+          
+          if (error) throw error;
+          
+        } catch (error: any) {
+          console.error('Error agregando tipo de trabajo:', error);
+          set({ error: error.message });
+        }
+      },
+      
+      toggleTipoTrabajoActivo: async (id) => {
+        const tipo = get().tiposTrabajo.find(t => t.id === id);
+        if (!tipo) return;
         
-        actualizarContratista: (id, datos) => {
-          set(state => ({
-            contratistas: state.contratistas.map(c =>
-              c.id === id ? { ...c, ...datos } : c
-            ),
-          }));
-        },
-        
-        toggleContratistaActivo: (id) => {
-          set(state => ({
-            contratistas: state.contratistas.map(c =>
-              c.id === id ? { ...c, activo: !c.activo } : c
-            ),
-          }));
-        },
-        
-        eliminarContratista: (id) => {
-          set(state => ({
-            contratistas: state.contratistas.filter(c => c.id !== id),
-          }));
-        },
-        
-        // CRUD - Tipos de Trabajo
-        agregarTipoTrabajo: (tipo) => {
-          const nuevo: TipoTrabajoConfig = {
-            ...tipo,
-            id: `tipo-${Date.now()}`,
-            activo: true,
-            created_at: new Date().toISOString(),
-          };
-          set(state => ({ tiposTrabajo: [...state.tiposTrabajo, nuevo] }));
-        },
-        
-        actualizarTipoTrabajo: (id, datos) => {
-          set(state => ({
-            tiposTrabajo: state.tiposTrabajo.map(t =>
-              t.id === id ? { ...t, ...datos } : t
-            ),
-          }));
-        },
-        
-        toggleTipoTrabajoActivo: (id) => {
-          set(state => ({
-            tiposTrabajo: state.tiposTrabajo.map(t =>
-              t.id === id ? { ...t, activo: !t.activo } : t
-            ),
-          }));
-        },
-        
-        eliminarTipoTrabajo: (id) => {
-          set(state => ({
-            tiposTrabajo: state.tiposTrabajo.filter(t => t.id !== id),
-          }));
-        },
-        
-        // CRUD - Notas de Turno
-        agregarNota: (nota) => {
-          const nueva: NotaTurno = {
-            ...nota,
-            id: `nota-${Date.now()}`,
-            leida: false,
-            created_at: new Date().toISOString(),
-          };
-          set(state => ({ notas: [...state.notas, nueva] }));
-        },
-        
-        marcarNotaLeida: (id) => {
-          set(state => ({
-            notas: state.notas.map(n =>
-              n.id === id ? { ...n, leida: true } : n
-            ),
-          }));
-        },
-        
-        eliminarNota: (id) => {
-          set(state => ({
-            notas: state.notas.filter(n => n.id !== id),
-          }));
-        },
-        
-        // Helpers
-        getCamionById: (id) => get().camiones.find(c => c.id === id),
-        getTecnicoById: (id) => get().tecnicos.find(t => t.id === id),
-        getContratistaById: (id) => get().contratistas.find(c => c.id === id),
-        getTipoTrabajoById: (id) => get().tiposTrabajo.find(t => t.id === id),
-        getTrabajoById: (id) => get().trabajos.find(t => t.id === id),
-        getItemProgramacionById: (id) => get().programacion.find(p => p.id === id),
-      }),
-      {
-        name: 'hangar-sprc-storage',
-        partialize: (state) => ({
-          tecnicos: state.tecnicos,
-          contratistas: state.contratistas,
-          tiposTrabajo: state.tiposTrabajo,
-          trabajos: state.trabajos,
-          notas: state.notas,
-          programacion: state.programacion,
-        }),
-      }
-    ),
+        try {
+          const { error } = await supabase
+            .from('tipos_trabajo')
+            .update({ activo: !tipo.activo })
+            .eq('id', id);
+          
+          if (error) throw error;
+          
+        } catch (error: any) {
+          console.error('Error toggling tipo de trabajo:', error);
+          set({ error: error.message });
+        }
+      },
+      
+      eliminarTipoTrabajo: async (id) => {
+        try {
+          const { error } = await supabase
+            .from('tipos_trabajo')
+            .delete()
+            .eq('id', id);
+          
+          if (error) throw error;
+          
+        } catch (error: any) {
+          console.error('Error eliminando tipo de trabajo:', error);
+          set({ error: error.message });
+        }
+      },
+      
+      // ==========================================
+      // CRUD - NOTAS DE TURNO
+      // ==========================================
+      
+      agregarNota: async (nota) => {
+        try {
+          const { error } = await supabase
+            .from('notas_turno')
+            .insert({
+              fecha: nota.fecha,
+              turno: nota.turno,
+              autor: nota.autor,
+              nota: nota.nota,
+              prioridad: nota.prioridad,
+              leida: false,
+            });
+          
+          if (error) throw error;
+          
+        } catch (error: any) {
+          console.error('Error agregando nota:', error);
+          set({ error: error.message });
+        }
+      },
+      
+      marcarNotaLeida: async (id) => {
+        try {
+          const { error } = await supabase
+            .from('notas_turno')
+            .update({ leida: true })
+            .eq('id', id);
+          
+          if (error) throw error;
+          
+        } catch (error: any) {
+          console.error('Error marcando nota como leída:', error);
+          set({ error: error.message });
+        }
+      },
+      
+      eliminarNota: async (id) => {
+        try {
+          const { error } = await supabase
+            .from('notas_turno')
+            .delete()
+            .eq('id', id);
+          
+          if (error) throw error;
+          
+        } catch (error: any) {
+          console.error('Error eliminando nota:', error);
+          set({ error: error.message });
+        }
+      },
+      
+      // ==========================================
+      // HELPERS
+      // ==========================================
+      
+      getCamionById: (id) => get().camiones.find(c => c.id === id),
+      getTecnicoById: (id) => get().tecnicos.find(t => t.id === id),
+      getContratistaById: (id) => get().contratistas.find(c => c.id === id),
+      getTipoTrabajoById: (id) => get().tiposTrabajo.find(t => t.id === id),
+      getTrabajoById: (id) => get().trabajos.find(t => t.id === id),
+      getItemProgramacionById: (id) => get().programacion.find(p => p.id === id),
+    }),
     { name: 'hangar-sprc' }
   )
 );
