@@ -467,16 +467,32 @@ export const useHangarStore = create<HangarState>()(
         const item = get().programacion.find(p => p.id === itemId);
         if (!item) return null;
         
+        // Verificar si ya tiene un trabajo creado
+        if (item.trabajo_id) {
+          console.log('Este item ya tiene un trabajo creado');
+          return null;
+        }
+        
         const camion = get().camiones.find(c => c.id === item.camion_id);
         if (!camion) return null;
+        
+        // Si se especificó una bahía, verificar que esté libre
+        const ocupadas = get().bahiasOcupadas();
+        let bahiaAsignada = bahia;
+        
+        if (bahia && ocupadas.includes(bahia)) {
+          // La bahía solicitada está ocupada, buscar una libre
+          const bahiasLibres = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].filter(b => !ocupadas.includes(b));
+          bahiaAsignada = bahiasLibres.length > 0 ? bahiasLibres[0] : undefined;
+        }
         
         try {
           const { data, error } = await supabase
             .from('trabajos')
             .insert({
               camion_id: item.camion_id,
-              ubicacion_tipo: bahia ? 'bahia' : 'fuera_bahia',
-              bahia_numero: bahia,
+              ubicacion_tipo: bahiaAsignada ? 'bahia' : 'fuera_bahia',
+              bahia_numero: bahiaAsignada,
               tipo: item.tipo,
               descripcion_falla: item.tipo === 'correctivo' ? item.descripcion_trabajo : null,
               ejecutado_por: item.tecnicos_asignados?.length > 0 ? 'tecnico_interno' : (item.contratista_id ? 'contratista' : 'tecnico_interno'),
@@ -487,7 +503,7 @@ export const useHangarStore = create<HangarState>()(
               estado: 'en_proceso',
               progreso_estimado: 0,
               horometro_entrada: camion.horometro_actual,
-              observaciones_iniciales: item.observaciones,
+              observaciones_iniciales: item.descripcion_trabajo + (item.observaciones ? `\n${item.observaciones}` : ''),
             })
             .select()
             .single();
@@ -637,12 +653,38 @@ export const useHangarStore = create<HangarState>()(
       
       actualizarUbicacionItem: async (id, ubicacion) => {
         try {
-          const { error } = await supabase
-            .from('programacion')
-            .update({ estado_ubicacion: ubicacion })
-            .eq('id', id);
+          const item = get().programacion.find(p => p.id === id);
           
-          if (error) throw error;
+          // Si se regresa a un estado que NO es 'en_hangar' y había un trabajo creado, eliminarlo
+          if (item && item.trabajo_id && ubicacion !== 'en_hangar' && ubicacion !== 'completado') {
+            // Eliminar los técnicos asignados al trabajo
+            await supabase.from('trabajo_tecnicos').delete().eq('trabajo_id', item.trabajo_id);
+            
+            // Eliminar el trabajo
+            await supabase.from('trabajos').delete().eq('id', item.trabajo_id);
+            
+            // Restaurar el estado del camión a operativo
+            await supabase
+              .from('camiones')
+              .update({ estado: 'operativo' })
+              .eq('id', item.camion_id);
+            
+            // Actualizar la programación quitando el trabajo_id
+            const { error } = await supabase
+              .from('programacion')
+              .update({ estado_ubicacion: ubicacion, trabajo_id: null })
+              .eq('id', id);
+            
+            if (error) throw error;
+          } else {
+            // Solo actualizar el estado de ubicación
+            const { error } = await supabase
+              .from('programacion')
+              .update({ estado_ubicacion: ubicacion })
+              .eq('id', id);
+            
+            if (error) throw error;
+          }
           
         } catch (error: any) {
           console.error('Error actualizando ubicación:', error);

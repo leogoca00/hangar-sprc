@@ -98,8 +98,8 @@ export function ProgramacionDiaria() {
   };
 
   const handleIniciarTrabajo = (itemId: string) => {
-    // Encontrar una bahía libre
-    const bahiasLibres = [1, 2, 3, 4, 5, 6, 7].filter(b => !ocupadas.includes(b));
+    // Encontrar una bahía libre (de las 11 bahías)
+    const bahiasLibres = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].filter(b => !ocupadas.includes(b));
     const bahia = bahiasLibres.length > 0 ? bahiasLibres[0] : undefined;
     agregarTrabajoDesdeProgram(itemId, bahia);
   };
