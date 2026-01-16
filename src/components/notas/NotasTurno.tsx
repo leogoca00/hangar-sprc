@@ -12,6 +12,7 @@ import {
   Trash2,
   Check,
   Sun,
+  Sunset,
   Moon,
   User
 } from 'lucide-react';
@@ -90,6 +91,7 @@ export function NotasTurno() {
   };
 
   const notasDia = notasDelDia.filter(n => n.turno === 'dia');
+  const notasTarde = notasDelDia.filter(n => n.turno === 'tarde');
   const notasNoche = notasDelDia.filter(n => n.turno === 'noche');
   const notasNoLeidas = notasDelDia.filter(n => !n.leida).length;
 
@@ -103,7 +105,7 @@ export function NotasTurno() {
             Notas de Cambio de Turno
           </h2>
           <p className="text-slate-400 text-sm mt-1">
-            Comunicación entre turnos de día y noche
+            Comunicación entre turnos de día, tarde y noche
           </p>
         </div>
 
@@ -179,6 +181,7 @@ export function NotasTurno() {
               onChange={(e) => setFormData({ ...formData, turno: e.target.value as Turno })}
               options={[
                 { value: 'dia', label: '☀️ Turno Día' },
+                { value: 'tarde', label: '🌅 Turno Tarde' },
                 { value: 'noche', label: '🌙 Turno Noche' },
               ]}
             />
@@ -216,13 +219,13 @@ export function NotasTurno() {
       )}
 
       {/* Secciones por turno */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Turno Día */}
         <div className="space-y-4">
           <div className="flex items-center gap-2">
             <Sun className="w-5 h-5 text-amber-400" />
             <h3 className="text-lg font-semibold text-white">Turno Día</h3>
-            <span className="text-sm text-slate-500">({notasDia.length} notas)</span>
+            <span className="text-sm text-slate-500">({notasDia.length})</span>
           </div>
 
           {notasDia.length === 0 ? (
@@ -249,7 +252,7 @@ export function NotasTurno() {
                     </div>
                     
                     <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
+                      <div className="flex items-center gap-2 mb-1 flex-wrap">
                         <span className="font-medium text-white">{nota.autor}</span>
                         <span className={cn(
                           'px-2 py-0.5 rounded text-xs font-medium border',
@@ -264,7 +267,86 @@ export function NotasTurno() {
                         )}
                       </div>
                       
-                      <p className="text-slate-300 whitespace-pre-line">{nota.nota}</p>
+                      <p className="text-slate-300 whitespace-pre-line text-sm">{nota.nota}</p>
+                      
+                      <p className="text-xs text-slate-500 mt-2">
+                        {format(parseISO(nota.created_at), "HH:mm", { locale: es })}
+                      </p>
+                    </div>
+
+                    <div className="flex flex-col gap-1">
+                      {!nota.leida && (
+                        <button
+                          onClick={() => marcarNotaLeida(nota.id)}
+                          className="p-2 rounded-lg text-slate-400 hover:text-emerald-400 hover:bg-emerald-500/20 transition-colors"
+                          title="Marcar como leída"
+                        >
+                          <Check className="w-4 h-4" />
+                        </button>
+                      )}
+                      <button
+                        onClick={() => eliminarNota(nota.id)}
+                        className="p-2 rounded-lg text-slate-400 hover:text-red-400 hover:bg-red-500/20 transition-colors"
+                        title="Eliminar"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                </Card>
+              );
+            })
+          )}
+        </div>
+
+        {/* Turno Tarde */}
+        <div className="space-y-4">
+          <div className="flex items-center gap-2">
+            <Sunset className="w-5 h-5 text-orange-400" />
+            <h3 className="text-lg font-semibold text-white">Turno Tarde</h3>
+            <span className="text-sm text-slate-500">({notasTarde.length})</span>
+          </div>
+
+          {notasTarde.length === 0 ? (
+            <Card className="p-6 text-center border-dashed">
+              <p className="text-slate-500">No hay notas del turno tarde</p>
+            </Card>
+          ) : (
+            notasTarde.map((nota) => {
+              const Icon = getPrioridadIcon(nota.prioridad);
+              return (
+                <Card 
+                  key={nota.id} 
+                  className={cn(
+                    'p-4 transition-all',
+                    !nota.leida && 'ring-2 ring-sprc-orange/50'
+                  )}
+                >
+                  <div className="flex items-start gap-3">
+                    <div className={cn(
+                      'p-2 rounded-lg',
+                      getPrioridadColor(nota.prioridad)
+                    )}>
+                      <Icon className="w-4 h-4" />
+                    </div>
+                    
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1 flex-wrap">
+                        <span className="font-medium text-white">{nota.autor}</span>
+                        <span className={cn(
+                          'px-2 py-0.5 rounded text-xs font-medium border',
+                          getPrioridadColor(nota.prioridad)
+                        )}>
+                          {nota.prioridad}
+                        </span>
+                        {!nota.leida && (
+                          <span className="px-2 py-0.5 rounded bg-sprc-orange/20 text-sprc-orange text-xs font-medium">
+                            Nueva
+                          </span>
+                        )}
+                      </div>
+                      
+                      <p className="text-slate-300 whitespace-pre-line text-sm">{nota.nota}</p>
                       
                       <p className="text-xs text-slate-500 mt-2">
                         {format(parseISO(nota.created_at), "HH:mm", { locale: es })}
@@ -301,7 +383,7 @@ export function NotasTurno() {
           <div className="flex items-center gap-2">
             <Moon className="w-5 h-5 text-blue-400" />
             <h3 className="text-lg font-semibold text-white">Turno Noche</h3>
-            <span className="text-sm text-slate-500">({notasNoche.length} notas)</span>
+            <span className="text-sm text-slate-500">({notasNoche.length})</span>
           </div>
 
           {notasNoche.length === 0 ? (
@@ -328,7 +410,7 @@ export function NotasTurno() {
                     </div>
                     
                     <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
+                      <div className="flex items-center gap-2 mb-1 flex-wrap">
                         <span className="font-medium text-white">{nota.autor}</span>
                         <span className={cn(
                           'px-2 py-0.5 rounded text-xs font-medium border',
@@ -343,7 +425,7 @@ export function NotasTurno() {
                         )}
                       </div>
                       
-                      <p className="text-slate-300 whitespace-pre-line">{nota.nota}</p>
+                      <p className="text-slate-300 whitespace-pre-line text-sm">{nota.nota}</p>
                       
                       <p className="text-xs text-slate-500 mt-2">
                         {format(parseISO(nota.created_at), "HH:mm", { locale: es })}

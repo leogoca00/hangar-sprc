@@ -85,16 +85,19 @@ interface HangarState {
   
   // CRUD - Técnicos
   agregarTecnico: (tecnico: NuevoTecnicoForm) => Promise<void>;
+  actualizarTecnico: (id: string, datos: Partial<Tecnico>) => Promise<void>;
   toggleTecnicoActivo: (id: string) => Promise<void>;
   eliminarTecnico: (id: string) => Promise<void>;
   
   // CRUD - Contratistas
   agregarContratista: (contratista: NuevoContratistaForm) => Promise<void>;
+  actualizarContratista: (id: string, datos: Partial<Contratista>) => Promise<void>;
   toggleContratistaActivo: (id: string) => Promise<void>;
   eliminarContratista: (id: string) => Promise<void>;
   
   // CRUD - Tipos de Trabajo
   agregarTipoTrabajo: (tipo: NuevoTipoTrabajoForm) => Promise<void>;
+  actualizarTipoTrabajo: (id: string, datos: Partial<TipoTrabajoConfig>) => Promise<void>;
   toggleTipoTrabajoActivo: (id: string) => Promise<void>;
   eliminarTipoTrabajo: (id: string) => Promise<void>;
   
@@ -303,6 +306,15 @@ export const useHangarStore = create<HangarState>()(
           .on('postgres_changes', { event: '*', schema: 'public', table: 'contratistas' }, async () => {
             const { data } = await supabase.from('contratistas').select('*').order('nombre');
             if (data) set({ contratistas: data });
+          })
+          .subscribe();
+        
+        // Tipos de Trabajo
+        supabase
+          .channel('tipos-trabajo-changes')
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'tipos_trabajo' }, async () => {
+            const { data } = await supabase.from('tipos_trabajo').select('*').order('nombre');
+            if (data) set({ tiposTrabajo: data });
           })
           .subscribe();
       },
@@ -700,6 +712,21 @@ export const useHangarStore = create<HangarState>()(
         }
       },
       
+      actualizarTecnico: async (id, datos) => {
+        try {
+          const { error } = await supabase
+            .from('tecnicos')
+            .update(datos)
+            .eq('id', id);
+          
+          if (error) throw error;
+          
+        } catch (error: any) {
+          console.error('Error actualizando técnico:', error);
+          set({ error: error.message });
+        }
+      },
+      
       toggleTecnicoActivo: async (id) => {
         const tecnico = get().tecnicos.find(t => t.id === id);
         if (!tecnico) return;
@@ -752,6 +779,21 @@ export const useHangarStore = create<HangarState>()(
           
         } catch (error: any) {
           console.error('Error agregando contratista:', error);
+          set({ error: error.message });
+        }
+      },
+      
+      actualizarContratista: async (id, datos) => {
+        try {
+          const { error } = await supabase
+            .from('contratistas')
+            .update(datos)
+            .eq('id', id);
+          
+          if (error) throw error;
+          
+        } catch (error: any) {
+          console.error('Error actualizando contratista:', error);
           set({ error: error.message });
         }
       },
@@ -809,6 +851,21 @@ export const useHangarStore = create<HangarState>()(
           
         } catch (error: any) {
           console.error('Error agregando tipo de trabajo:', error);
+          set({ error: error.message });
+        }
+      },
+      
+      actualizarTipoTrabajo: async (id, datos) => {
+        try {
+          const { error } = await supabase
+            .from('tipos_trabajo')
+            .update(datos)
+            .eq('id', id);
+          
+          if (error) throw error;
+          
+        } catch (error: any) {
+          console.error('Error actualizando tipo de trabajo:', error);
           set({ error: error.message });
         }
       },

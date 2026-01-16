@@ -42,7 +42,7 @@ export type EjecutadoPor = 'tecnico_interno' | 'contratista' | 'otro_departament
 export type EspecialidadTecnico = 'mecanico' | 'electrico' | 'multirol';
 
 // Turno
-export type Turno = 'dia' | 'noche';
+export type Turno = 'dia' | 'tarde' | 'noche';
 
 // Departamentos externos
 export type DepartamentoExterno = 'telecomunicaciones';
@@ -299,7 +299,7 @@ export interface ResumenSemanal {
 // CONSTANTES
 // ============================================
 
-export const BAHIAS = [1, 2, 3, 4, 5, 6, 7] as const;
+export const BAHIAS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11] as const;
 
 export const UBICACIONES_FUERA_BAHIA: Record<UbicacionFueraBahia, string> = {
   zona_pintura: 'Zona de Pintura',
@@ -340,6 +340,7 @@ export const ESPECIALIDADES_TECNICO: Record<EspecialidadTecnico, string> = {
 
 export const TURNOS: Record<Turno, string> = {
   dia: 'Día',
+  tarde: 'Tarde',
   noche: 'Noche',
 };
 
@@ -413,4 +414,4 @@ export function generarCamiones(): Camion[] {
 
 // Total de camiones: R06-R92 (87) + K01-K14 (14) = 101
 export const TOTAL_CAMIONES = 101;
-export const TOTAL_BAHIAS = 7;
+export const TOTAL_BAHIAS = 11;
